@@ -6,7 +6,7 @@ import bodyParser from 'body-parser';
 import axios from 'axios';
 import crypto from 'crypto';
 
-// Define the HMAC generation function
+// HMAC function
 function hmac_rawurlsafe_base64_string(distinct_id, secret) {
   return crypto
     .createHmac('sha256', secret)
@@ -17,66 +17,69 @@ function hmac_rawurlsafe_base64_string(distinct_id, secret) {
 
 const INBOX_SECRET = "W_F0I04NaLzhJEaEhuzRO3y7YCwJaLSbCXi973DHHe0";
 
-async function startServer() {
-  const app = express();
-  const port = process.env.PORT || 4000;
-  const typeDefs = `
-    type Student {
-      studentName: String!
-      studentUsername: String!
-      all: Int!
-      easy: Int!
-      medium: Int!
-      hard: Int!
-    }
-    type Query {
-      getStudents(usernames: [String!]!): [Student!]!
-    }
-  `;
+const app = express();
+const PORT = process.env.PORT || 4000;
 
-  const resolvers = {
-    Query: {
-      getStudents: async (_, { usernames }) => {
-        const query = `
-          query getUserProfile($username: String!) {
-            matchedUser(username: $username) {
-              username
-              profile {
-                realName
-              }
-              submitStats {
-                acSubmissionNum {
-                  difficulty
-                  count
-                }
+app.use(bodyParser.json());
+app.use(cors());
+
+// Define schema and resolvers
+const typeDefs = `
+  type Student {
+    studentName: String!
+    studentUsername: String!
+    all: Int!
+    easy: Int!
+    medium: Int!
+    hard: Int!
+  }
+  type Query {
+    getStudents(usernames: [String!]!): [Student!]!
+  }
+`;
+
+const resolvers = {
+  Query: {
+    getStudents: async (_, { usernames }) => {
+      const query = `
+        query getUserProfile($username: String!) {
+          matchedUser(username: $username) {
+            username
+            profile {
+              realName
+            }
+            submitStats {
+              acSubmissionNum {
+                difficulty
+                count
               }
             }
           }
-        `;
+        }
+      `;
 
-        const requests = usernames.map((username) =>
-          axios.post(
-            "https://leetcode.com/graphql",
-            {
-              query,
-              variables: { username },
+      const requests = usernames.map((username) =>
+        axios.post(
+          "https://leetcode.com/graphql",
+          {
+            query,
+            variables: { username },
+          },
+          {
+            headers: {
+              "Content-Type": "application/json",
             },
-            {
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          )
-        );
-
-        const responses = await Promise.all(requests);
-        return responses.map((response) => {
-          const userData = response.data.data.matchedUser;
-          if (!userData) {
-            return null; // or handle the error as appropriate
           }
-          const submissionData = userData.submitStats.acSubmissionNum;
+        )
+      );
 
+      const responses = await Promise.all(requests);
+      return responses
+        .map((response) => {
+          const userData = response.data.data.matchedUser;
+          if (!userData) return null;
+
+          const submissionData = userData.submitStats.acSubmissionNum;
           const solvedCounts = submissionData.reduce(
             (obj, { difficulty, count }) => {
               obj[difficulty.toLowerCase()] = count;
@@ -90,32 +93,36 @@ async function startServer() {
             studentUsername: userData.username,
             ...solvedCounts,
           };
-        }).filter(student => student !== null); // filter out null responses
-      },
+        })
+        .filter((s) => s !== null);
     },
-  };
+  },
+};
 
-  const server = new ApolloServer({ typeDefs, resolvers });
+// Create Apollo Server
+const server = new ApolloServer({ typeDefs, resolvers });
 
-  app.use(bodyParser.json());
-  app.use(cors());
-
+// Start Apollo server and mount middleware properly
+async function startApolloServer() {
   await server.start();
-
   app.use('/graphql', expressMiddleware(server));
+
+  // Basic route for testing Render health check
+  app.get('/', (req, res) => {
+    res.send('✅ Server running fine on Render');
+  });
 
   app.get('/generate-subscriber-id', (req, res) => {
     const distinct_id = req.query.distinct_id;
-
     if (!distinct_id) {
       return res.status(400).send('distinct_id is required');
     }
-
     const subscriber_id = hmac_rawurlsafe_base64_string(distinct_id, INBOX_SECRET);
     res.json({ subscriber_id });
   });
 
-  app.listen(port, () => console.log(`Server started on port ${port}`));
+  app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 }
 
-startServer();
+// Start the server
+startApolloServer();
