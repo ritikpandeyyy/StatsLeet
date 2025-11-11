@@ -23,7 +23,7 @@ const PORT = process.env.PORT || 4000;
 app.use(bodyParser.json());
 app.use(cors());
 
-// Define schema and resolvers
+// Define GraphQL schema
 const typeDefs = `
   type Student {
     studentName: String!
@@ -33,11 +33,13 @@ const typeDefs = `
     medium: Int!
     hard: Int!
   }
+
   type Query {
     getStudents(usernames: [String!]!): [Student!]!
   }
 `;
 
+// Define GraphQL resolvers
 const resolvers = {
   Query: {
     getStudents: async (_, { usernames }) => {
@@ -58,71 +60,83 @@ const resolvers = {
         }
       `;
 
-      const requests = usernames.map((username) =>
-        axios.post(
-          "https://leetcode.com/graphql",
-          {
-            query,
-            variables: { username },
-          },
-          {
-            headers: {
-              "Content-Type": "application/json",
+      try {
+        const requests = usernames.map((username) =>
+          axios.post(
+            "https://leetcode.com/graphql",
+            {
+              query,
+              variables: { username },
             },
-          }
-        )
-      );
+            {
+              headers: { "Content-Type": "application/json" },
+            }
+          )
+        );
 
-      const responses = await Promise.all(requests);
-      return responses
-        .map((response) => {
-          const userData = response.data.data.matchedUser;
-          if (!userData) return null;
+        const responses = await Promise.all(requests);
 
-          const submissionData = userData.submitStats.acSubmissionNum;
-          const solvedCounts = submissionData.reduce(
-            (obj, { difficulty, count }) => {
-              obj[difficulty.toLowerCase()] = count;
-              return obj;
-            },
-            { all: 0, easy: 0, medium: 0, hard: 0 }
-          );
+        return responses
+          .map((response) => {
+            const userData = response.data.data.matchedUser;
+            if (!userData) return null;
 
-          return {
-            studentName: userData.profile.realName,
-            studentUsername: userData.username,
-            ...solvedCounts,
-          };
-        })
-        .filter((s) => s !== null);
+            const submissionData = userData.submitStats.acSubmissionNum;
+            const solvedCounts = submissionData.reduce(
+              (obj, { difficulty, count }) => {
+                obj[difficulty.toLowerCase()] = count;
+                return obj;
+              },
+              { all: 0, easy: 0, medium: 0, hard: 0 }
+            );
+
+            return {
+              studentName: userData.profile.realName,
+              studentUsername: userData.username,
+              ...solvedCounts,
+            };
+          })
+          .filter((student) => student !== null);
+      } catch (error) {
+        console.error("Error fetching student data:", error);
+        return [];
+      }
     },
   },
 };
 
-// Create Apollo Server
+// Initialize Apollo Server
 const server = new ApolloServer({ typeDefs, resolvers });
 
-// Start Apollo server and mount middleware properly
+// Start server properly for Render
 async function startApolloServer() {
-  await server.start();
-  app.use('/graphql', expressMiddleware(server));
+  try {
+    await server.start();
+    app.use('/graphql', expressMiddleware(server));
 
-  // Basic route for testing Render health check
-  app.get('/', (req, res) => {
-    res.send('✅ Server running fine on Render');
-  });
+    // ✅ Health check route for Render
+    app.get('/', (req, res) => {
+      res.send('✅ Server running fine on Render');
+    });
 
-  app.get('/generate-subscriber-id', (req, res) => {
-    const distinct_id = req.query.distinct_id;
-    if (!distinct_id) {
-      return res.status(400).send('distinct_id is required');
-    }
-    const subscriber_id = hmac_rawurlsafe_base64_string(distinct_id, INBOX_SECRET);
-    res.json({ subscriber_id });
-  });
+    // ✅ Subscriber ID endpoint
+    app.get('/generate-subscriber-id', (req, res) => {
+      const distinct_id = req.query.distinct_id;
+      if (!distinct_id) {
+        return res.status(400).send('distinct_id is required');
+      }
+      const subscriber_id = hmac_rawurlsafe_base64_string(distinct_id, INBOX_SECRET);
+      res.json({ subscriber_id });
+    });
 
-  app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    // ✅ IMPORTANT: Listen on 0.0.0.0 for Render
+    app.listen(PORT, '0.0.0.0', () =>
+      console.log(`🚀 Server running on port ${PORT}`)
+    );
+  } catch (error) {
+    console.error("❌ Server failed to start:", error);
+  }
 }
 
-// Start the server
+// Start Apollo + Express app
 startApolloServer();
