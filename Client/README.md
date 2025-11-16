@@ -1,8 +1,24 @@
-# React + Vite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+StatsLeet/
+│── Client/               # Frontend
+│   ├── src/
+│   ├── public/
+│   └── package.json
+│
+│── Server/               # Backend
+│   ├── routes/
+│   ├── controllers/
+│   ├── utils/
+│   └── package.json
+│
+└── README.md
+git clone https://github.com/ritikpandeyyy/StatsLeet.git
+cd StatsLeet
+▶️ Frontend Setup (Client)
+cd Client
+npm install
+npm run dev
+🖥️ Backend Setup (Server)
+cd Server
+npm install
+npm start
